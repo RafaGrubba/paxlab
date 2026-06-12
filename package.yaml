@@ -29,8 +29,12 @@ dependencies:
   - mtl
   - transformers
   - aeson
-  - scotty
-  - lucid
+  - servant
+  - servant-server
+  - warp
+  - wai
+  - wai-cors
+  - wai-app-static
   - persistent
   - monad-logger
   - password
