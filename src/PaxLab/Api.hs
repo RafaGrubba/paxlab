@@ -21,7 +21,10 @@ import           Data.Time                   (getCurrentTime)
 import           Database.Persist
 import           Database.Persist.Sql        (ConnectionPool, fromSqlKey,
                                               toSqlKey)
-import           Network.Wai.Handler.Warp    (run)
+import           Network.HTTP.Types.Status   (status500)
+import           Network.Wai                 (responseLBS)
+import           Network.Wai.Handler.Warp    (defaultSettings, runSettings,
+                                              setOnExceptionResponse, setPort)
 import           Network.Wai.Middleware.Cors (simpleCors)
 import           Servant
 import           Servant.Server.StaticFiles  (serveDirectoryFileServer)
@@ -459,7 +462,9 @@ extractResidues :: Text -> Either Text Text
 extractResidues dat
   | T.isPrefixOf ">" trimmed =
       case parseFasta trimmed of
-        Right (r : _) -> Right (faResidues r)
+        Right (r : _)
+          | T.null (faResidues r) -> Left "A sequência está vazia."
+          | otherwise             -> Right (faResidues r)
         Right []      -> Left "Nenhuma sequência encontrada no FASTA."
         Left err      -> Left err
   | T.null trimmed = Left "Cole uma sequência."
@@ -470,4 +475,10 @@ extractResidues dat
   where trimmed = T.strip dat
 
 runApi :: Int -> ConnectionPool -> IO ()
-runApi port pool = run port (simpleCors (serve api (server pool)))
+runApi port pool = runSettings settings (simpleCors (serve api (server pool)))
+  where
+    settings = setPort port (setOnExceptionResponse onErr defaultSettings)
+    -- Exceções não tratadas viram um 500 com corpo JSON (não texto cru).
+    onErr _ = responseLBS status500
+                [("Content-Type", "application/json")]
+                "{\"error\":\"Erro interno no servidor.\"}"

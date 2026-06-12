@@ -21,11 +21,16 @@ async function api(method, path, body) {
   const res = await fetch(path, {
     method, headers, body: body ? JSON.stringify(body) : undefined,
   });
+  const txt = await res.text();
   let data = null;
-  try { data = await res.json(); } catch (_) { /* sem corpo */ }
+  try { data = txt ? JSON.parse(txt) : null; } catch (_) { /* corpo não-JSON */ }
   if (!res.ok) {
     if (res.status === 401) { logout(); }
-    throw new Error((data && data.error) || ('Erro ' + res.status));
+    const msg = (data && data.error)
+      || (res.status >= 500 ? 'Erro no servidor. Tente novamente em instantes.'
+        : res.status === 400 ? 'Dados inválidos. Verifique o que foi enviado.'
+        : ('Não foi possível completar (erro ' + res.status + ').'));
+    throw new Error(msg);
   }
   return data;
 }
@@ -479,10 +484,10 @@ async function loadAlignList() {
   const rs = await api('GET', '/api/alignments');
   document.getElementById('allist').innerHTML = rs.length ? rs.map(r => `
     <li class="py-2 flex items-center gap-2">
-      <button onclick="viewAlign('${r.token}')" class="text-sky-600 font-medium">${esc(r.seqAName)} × ${esc(r.seqBName)}</button>
-      <span class="text-xs bg-slate-100 rounded px-2 py-0.5">score ${r.score}</span>
-      <span class="text-xs text-slate-400">${r.identity.toFixed(1)}%</span>
-      <details class="relative ml-auto">
+      <button onclick="viewAlign('${r.token}')" class="text-sky-600 font-medium flex-1 min-w-0 truncate text-left">${esc(r.seqAName)} × ${esc(r.seqBName)}</button>
+      <span class="text-xs bg-slate-100 rounded px-2 py-0.5 whitespace-nowrap">score ${r.score}</span>
+      <span class="text-xs text-slate-400 whitespace-nowrap">${r.identity.toFixed(1)}%</span>
+      <details class="relative">
         <summary class="list-none cursor-pointer px-2 text-slate-500 text-lg leading-none">⋮</summary>
         <div class="absolute right-0 mt-1 w-44 bg-white border rounded-lg shadow-lg z-10 text-sm overflow-hidden">
           <button onclick="favAlign('${r.token}')" class="block w-full text-left px-3 py-2 hover:bg-slate-100">${r.favorite ? '☆ Desfavoritar' : '⭐ Favoritar'}</button>
