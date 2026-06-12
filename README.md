@@ -3,7 +3,8 @@
 > 🔗 **Site no ar:** <https://paxlab.onrender.com> &nbsp;·&nbsp;
 > **Login de demonstração:** `demo@paxlab.bio` / `paxlab123`
 
-Plataforma de bioinformática em **Haskell** onde cada análise vira um
+Plataforma de bioinformática com **back-end REST em Haskell (Servant)** e
+**front-end separado (HTML + Tailwind + htmx)**, onde cada análise vira um
 **registro reproduzível e compartilhável**. Analise sequências de DNA, RNA
 e proteína; cada operação guarda a *receita* exata e pode ser refeita por
 qualquer pessoa através de um permalink.
@@ -70,9 +71,11 @@ projeto e o argumento central da apresentação.
 | Importação        | `src/PaxLab/Fetch.hs`  | Busca FASTA no NCBI (E-utilities)       |
 | Caderno           | `src/PaxLab/Analysis.hs`  | `Operation` (receita) + `runOperation` (pura) |
 | Banco             | `src/PaxLab/Model.hs`, `Db.hs` | Esquema persistent (SQLite em dev, PostgreSQL em produção) |
-| Autenticação      | `src/PaxLab/Auth.hs`   | bcrypt + tokens                         |
-| Web               | `src/PaxLab/Web.hs`    | Rotas Scotty + sessões                  |
-| Views             | `src/PaxLab/Views.hs`  | HTML com Lucid + htmx                   |
+| Autenticação      | `src/PaxLab/Auth.hs`   | bcrypt + token de sessão (Bearer)       |
+| API REST          | `src/PaxLab/Api.hs`    | Endpoints JSON em `/api/*` (Servant)    |
+| Front-end         | `frontend/`           | HTML + Tailwind CSS + htmx, consumindo a API |
 
-Stack: **Scotty** (servidor) · **persistent** com **SQLite** (dev) / **PostgreSQL**
-(produção) · **Lucid** (HTML tipado) · **htmx** (interatividade sem JS).
+**Back-end:** API REST em Haskell com **Servant** (JSON, autenticação por token
+Bearer). **Front-end:** separado, em **HTML + Tailwind CSS + htmx** (`frontend/`),
+servido como estático pelo próprio app e consumindo a API. **Banco:** `persistent`
+com **SQLite** (dev) / **PostgreSQL** (produção).

@@ -46,6 +46,20 @@ function toast(msg, ok) {
   setTimeout(() => d.remove(), 3000);
 }
 
+// Baixa o JSON de um recurso (análise/alinhamento) como arquivo.
+async function downloadJSON(filename, path) {
+  try {
+    const data = await api('GET', path);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) { toast(e.message, false); }
+}
+function downloadAnalysis(tok) { downloadJSON('analise-' + tok + '.json', '/api/analyses/' + tok); }
+function downloadAlign(tok) { downloadJSON('alinhamento-' + tok + '.json', '/api/alignments/' + tok); }
+
 // ---- navegação --------------------------------------------------------------
 function renderNav() {
   if (!State.token) { $nav().innerHTML = ''; return; }
@@ -80,6 +94,28 @@ function logout() {
 
 // ---- Views ------------------------------------------------------------------
 const Views = {};
+
+Views.landing = function () {
+  $nav().innerHTML = '';
+  const feat = (i, t, d) => `<div class="${card} text-center"><div class="text-3xl">${i}</div><div class="font-semibold mt-1">${t}</div><div class="text-sm text-slate-500 mt-1">${d}</div></div>`;
+  $app().innerHTML = `
+    <section class="text-center py-12">
+      <h1 class="text-4xl font-bold">🧬 PaxLab</h1>
+      <p class="text-lg text-slate-600 max-w-xl mx-auto mt-4">
+        Bioinformática que você pode reproduzir. Analise sequências de DNA, RNA e
+        proteína — e cada análise vira um registro permanente e reproduzível.
+      </p>
+      <div class="flex gap-3 justify-center mt-8">
+        <button onclick="Views.register()" class="${btnPrimary} text-base px-5 py-2.5">Criar conta</button>
+        <button onclick="Views.login()" class="${btnGhost} text-base px-5 py-2.5">Entrar</button>
+      </div>
+    </section>
+    <div class="grid sm:grid-cols-3 gap-4">
+      ${feat('📓', 'Caderno reprodutível', 'Cada análise guarda a receita e tem permalink.')}
+      ${feat('🎓', 'Modo educacional', 'Cada resultado vem explicado em português.')}
+      ${feat('⚙️', 'Núcleo funcional', 'Funções puras em Haskell: mesma entrada, mesma saída.')}
+    </div>`;
+};
 
 Views.login = function () {
   $nav().innerHTML = '';
@@ -219,9 +255,10 @@ Views.seq = async function (id) {
         </h2>
         <a href="/api/sequences/${id}/fasta" class="text-sm text-sky-600">baixar FASTA</a>
       </div>
-      <pre id="seqbox" class="bg-slate-900 text-emerald-200 rounded-lg p-3 mt-2 text-xs whitespace-pre-wrap break-all"></pre>
-      <div id="bio" class="mt-3"></div>
+      <pre id="seqbox" class="bg-slate-900 text-emerald-200 rounded-lg p-3 mt-2 text-sm whitespace-pre-wrap break-all"></pre>
+      <p id="orflegend" class="text-sm text-slate-400 mt-1"></p>
     </section>
+    <section class="${card} hidden" id="biocard"><div id="bio"></div></section>
     <section class="${card}">
       <h3 class="font-semibold">Rodar análise</h3>
       <form id="an" class="flex flex-wrap items-end gap-2 mt-2">
@@ -264,7 +301,8 @@ Views.seq = async function (id) {
     try { const d = await api('GET', `/api/sequences/${id}/orfs`); orfs = d.orfs || []; } catch (_) {}
   }
   document.getElementById('seqbox').innerHTML = highlightSeq(s.residues, orfs);
-  renderBio(id, isProt, orfs);
+  if (orfs.length) document.getElementById('orflegend').textContent = 'Cores na sequência = ORFs por frame (+1, +2, +3).';
+  renderBio(id, isProt);
 
   document.getElementById('an').onsubmit = async (e) => {
     e.preventDefault();
@@ -301,26 +339,28 @@ function highlightSeq(res, orfs) {
   return out;
 }
 
-async function renderBio(id, isProt, orfs) {
-  const box = document.getElementById('bio');
+async function renderBio(id, isProt) {
+  const bio = document.getElementById('bio');
+  const cardEl = document.getElementById('biocard');
+  let html = '';
   if (isProt) {
     try {
       const p = await api('GET', `/api/sequences/${id}/protein`);
-      box.innerHTML = `<h3 class="font-semibold mt-2">Propriedades da proteína</h3>
-        <p class="text-sm text-slate-600">Comprimento: <b>${p.length} aa</b> · Massa: <b>${Math.round(p.weight)} Da</b></p>
-        <div class="flex flex-wrap gap-1 mt-1">${(p.composition || []).slice(0, 10).map(c =>
-          `<span class="text-xs bg-slate-100 rounded px-2 py-0.5">${esc(c.aa)}×${c.count}</span>`).join('')}</div>`;
+      html = `<h3 class="font-semibold">Propriedades da proteína</h3>
+        <p class="text-sm text-slate-600 mt-1">Comprimento: <b>${p.length} aa</b> · Massa molecular: <b>${Math.round(p.weight)} Da</b></p>
+        <div class="flex flex-wrap gap-1 mt-2">${(p.composition || []).slice(0, 12).map(c =>
+          `<span class="text-sm bg-slate-100 rounded px-2 py-0.5">${esc(c.aa)} ×${c.count}</span>`).join('')}</div>`;
     } catch (_) {}
   } else {
-    let html = '';
-    if (orfs.length) html += `<p class="text-xs text-slate-400">Cores na sequência = ORFs por frame (+1, +2, +3).</p>`;
     try {
       const rs = await api('GET', `/api/sequences/${id}/restriction`);
-      if (rs.length) html += `<h3 class="font-semibold mt-2">Sítios de restrição</h3><ul class="text-sm">${
-        rs.map(e => `<li><b>${esc(e.name)}</b> <span class="text-xs bg-slate-100 rounded px-1">${esc(e.site)}</span> — pos. ${e.positions.join(', ')}</li>`).join('')}</ul>`;
+      if (rs.length) html = `<h3 class="font-semibold">Sítios de restrição</h3>
+        <ul class="text-sm mt-1 space-y-0.5">${rs.map(e =>
+          `<li><b>${esc(e.name)}</b> <span class="text-sm bg-slate-100 rounded px-1">${esc(e.site)}</span> — pos. ${e.positions.join(', ')}</li>`).join('')}</ul>`;
     } catch (_) {}
-    box.innerHTML = html;
   }
+  if (html) { bio.innerHTML = html; cardEl.classList.remove('hidden'); }
+  else { cardEl.classList.add('hidden'); }
 }
 
 async function loadHistory(id) {
@@ -332,7 +372,7 @@ async function loadHistory(id) {
 function analysisCard(a) {
   const link = location.origin + '/#a/' + a.token;
   return `
-    <div class="border border-slate-200 rounded-lg p-3 my-2">
+    <div class="border border-slate-200 rounded-lg p-4 my-3">
       <div class="flex items-center justify-between">
         <strong>${esc(a.operation)}</strong>
         <details class="relative">
@@ -343,13 +383,16 @@ function analysisCard(a) {
           </div>
         </details>
       </div>
-      <pre class="bg-slate-900 text-emerald-200 rounded p-2 mt-1 text-xs whitespace-pre-wrap break-all">${esc(a.resultText)}</pre>
-      <p class="text-xs text-slate-500 mt-1">${esc(a.summary)}</p>
-      <details class="mt-2">
-        <summary class="list-none cursor-pointer text-sky-600 text-sm w-max">🔗 permalink</summary>
-        <input readonly onclick="this.select()" value="${esc(link)}"
-          class="w-full mt-1 rounded border border-slate-300 px-2 py-1 text-xs font-mono bg-slate-50">
-      </details>
+      <pre class="bg-slate-900 text-emerald-200 rounded p-3 mt-3 text-sm whitespace-pre-wrap break-all">${esc(a.resultText)}</pre>
+      <p class="text-sm text-slate-500 mt-3">${esc(a.summary)}</p>
+      <div class="flex items-start justify-between gap-4 mt-4">
+        <details class="flex-1">
+          <summary class="list-none cursor-pointer text-sky-600 text-sm w-max">🔗 permalink</summary>
+          <input readonly onclick="this.select()" value="${esc(link)}"
+            class="w-full mt-1 rounded border border-slate-300 px-2 py-1 text-xs font-mono bg-slate-50">
+        </details>
+        <button onclick="downloadAnalysis('${a.token}')" class="text-slate-500 text-sm whitespace-nowrap hover:text-slate-800">baixar JSON</button>
+      </div>
     </div>`;
 }
 
@@ -411,7 +454,6 @@ Views.align = async function () {
         </div>
         <button class="${btnPrimary} mt-3">Alinhar e registrar</button>
       </form>`}
-      <div id="alres" class="mt-3"></div>
     </section>
     <section class="${card}">
       <h3 class="font-semibold">Alinhamentos registrados</h3>
@@ -427,8 +469,7 @@ Views.align = async function () {
         const d = await api('POST', '/api/align', {
           seqA: +f.a.value, seqB: +f.b.value,
           match: +f.match.value, mismatch: +f.mismatch.value, gap: +f.gap.value });
-        document.getElementById('alres').innerHTML = alignResult(d.record, d.alignedA, d.alignedB);
-        loadAlignList();
+        go('alignView', d.record.token);
       } catch (err) { toast(err.message, false); }
     };
   }
@@ -438,7 +479,6 @@ async function loadAlignList() {
   const rs = await api('GET', '/api/alignments');
   document.getElementById('allist').innerHTML = rs.length ? rs.map(r => `
     <li class="py-2 flex items-center gap-2">
-      ${r.favorite ? '<span title="favorito">⭐</span>' : ''}
       <button onclick="viewAlign('${r.token}')" class="text-sky-600 font-medium">${esc(r.seqAName)} × ${esc(r.seqBName)}</button>
       <span class="text-xs bg-slate-100 rounded px-2 py-0.5">score ${r.score}</span>
       <span class="text-xs text-slate-400">${r.identity.toFixed(1)}%</span>
@@ -451,27 +491,7 @@ async function loadAlignList() {
       </details>
     </li>`).join('') : '<li class="py-2 text-slate-500">Nenhum alinhamento ainda.</li>';
 }
-async function viewAlign(tok) {
-  const res = document.getElementById('alres');
-  if (!res) { location.hash = '#al/' + tok; return; }
-  const d = await api('GET', '/api/alignments/' + tok);
-  res.innerHTML = alignResult(d.record, d.alignedA, d.alignedB);
-  window.scrollTo(0, 0);
-}
-function alignResult(r, a, b) {
-  const link = location.origin + '/#al/' + r.token;
-  return `
-    <div class="border rounded-lg p-3">
-      <p class="text-sm text-slate-600">${esc(r.seqAName)} × ${esc(r.seqBName)} ·
-        <b>score ${r.score}</b> · <b>${r.identity.toFixed(1)}%</b> · pont. ${r.match}/${r.mismatch}/${r.gap}</p>
-      <p class="text-xs text-slate-400 mt-1">verde = igual · laranja = diferente · vermelho = lacuna</p>
-      <div class="overflow-x-auto mt-1">${alignViz(a, b)}</div>
-      <details class="mt-2">
-        <summary class="list-none cursor-pointer text-sky-600 text-sm w-max">🔗 permalink</summary>
-        <input readonly onclick="this.select()" value="${esc(link)}" class="w-full mt-1 rounded border px-2 py-1 text-xs font-mono bg-slate-50">
-      </details>
-    </div>`;
-}
+function viewAlign(tok) { go('alignView', tok); }
 function alignViz(a, b) {
   const row = (self, other) => {
     let out = '';
@@ -484,22 +504,48 @@ function alignViz(a, b) {
     }
     return out;
   };
-  return `<pre class="bg-slate-900 rounded p-2 text-xs leading-5" style="width:max-content;min-width:100%">${row(a, b)}\n${row(b, a)}</pre>`;
+  return `<pre class="bg-slate-900 rounded p-2 text-sm leading-6" style="width:max-content;min-width:100%">${row(a, b)}\n${row(b, a)}</pre>`;
 }
 async function favAlign(tok) { try { await api('POST', `/api/alignments/${tok}/favorite`); loadAlignList(); } catch (e) { toast(e.message, false); } }
 async function delAlignF(tok) { if (!confirm('Excluir este alinhamento?')) return; try { await api('DELETE', '/api/alignments/' + tok); loadAlignList(); } catch (e) { toast(e.message, false); } }
+async function favAlignReload(tok) { try { await api('POST', `/api/alignments/${tok}/favorite`); go('alignView', tok); } catch (e) { toast(e.message, false); } }
+async function delAlignGo(tok) { if (!confirm('Excluir este alinhamento?')) return; try { await api('DELETE', '/api/alignments/' + tok); toast('Excluído.', true); go('align'); } catch (e) { toast(e.message, false); } }
+
+// Tela dedicada de um alinhamento individual.
 Views.alignView = async function (tok) {
   const d = await api('GET', '/api/alignments/' + tok);
+  const r = d.record;
+  const link = location.origin + '/#al/' + tok;
   $app().innerHTML = `
     ${State.token ? `<button onclick="go('align')" class="${btnGhost} mb-3">← Alinhamentos</button>` : ''}
-    <section class="${card}"><h2 class="text-xl font-bold">Alinhamento compartilhado</h2>
-      <div class="mt-2">${alignResult(d.record, d.alignedA, d.alignedB)}</div></section>`;
+    <section class="${card}">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-bold">${esc(r.seqAName)} × ${esc(r.seqBName)}</h2>
+        ${State.token ? `<details class="relative">
+          <summary class="list-none cursor-pointer px-2 text-slate-500 text-lg leading-none">⋮</summary>
+          <div class="absolute right-0 mt-1 w-44 bg-white border rounded-lg shadow-lg z-10 text-sm overflow-hidden">
+            <button onclick="favAlignReload('${tok}')" class="block w-full text-left px-3 py-2 hover:bg-slate-100">${r.favorite ? '☆ Desfavoritar' : '⭐ Favoritar'}</button>
+            <button onclick="delAlignGo('${tok}')" class="block w-full text-left px-3 py-2 hover:bg-slate-100 text-rose-600">🗑 Excluir</button>
+          </div></details>` : ''}
+      </div>
+      <p class="text-sm text-slate-600 mt-1"><b>score ${r.score}</b> · <b>${r.identity.toFixed(1)}%</b></p>
+      <p class="text-sm text-slate-600">pontuação ${r.match}/${r.mismatch}/${r.gap}</p>
+      <p class="text-sm text-slate-400 mt-1">verde = igual · laranja = diferente · vermelho = lacuna</p>
+      <div class="overflow-x-auto mt-2">${alignViz(d.alignedA, d.alignedB)}</div>
+      <div class="flex items-start justify-between gap-4 mt-3">
+        <details class="flex-1">
+          <summary class="list-none cursor-pointer text-sky-600 text-sm w-max">🔗 permalink</summary>
+          <input readonly onclick="this.select()" value="${esc(link)}" class="w-full mt-1 rounded border px-2 py-1 text-xs font-mono bg-slate-50">
+        </details>
+        <button onclick="downloadAlign('${tok}')" class="text-slate-500 text-sm whitespace-nowrap hover:text-slate-800">baixar JSON</button>
+      </div>
+    </section>`;
 };
 
 // ---- Importar NCBI ----------------------------------------------------------
 Views.import = function () {
   $app().innerHTML = `
-    <section class="${card} max-w-md">
+    <section class="${card} max-w-md mx-auto mt-6">
       <h2 class="text-xl font-bold">Importar do NCBI</h2>
       <p class="text-sm text-slate-500">Número de acesso do GenBank (ex.: NM_000207 — insulina humana).</p>
       <form id="imp" class="mt-2">
@@ -611,7 +657,7 @@ Views.favorites = async function () {
       <div class="mt-2">${d.analyses.length ? d.analyses.map(analysisCard).join('') : '<p class="text-slate-500 text-sm">Nenhuma análise favoritada.</p>'}</div></section>
     <section class="${card}"><h3 class="font-semibold">Alinhamentos favoritos</h3>
       <ul class="mt-2 divide-y">${d.alignments.length ? d.alignments.map(r => `
-        <li class="py-2 flex items-center gap-2">⭐
+        <li class="py-2 flex items-center gap-2">
           <button onclick="viewAlign('${r.token}')" class="text-sky-600 font-medium">${esc(r.seqAName)} × ${esc(r.seqBName)}</button>
           <span class="text-xs text-slate-400">${r.identity.toFixed(1)}%</span></li>`).join('') : '<li class="py-2 text-slate-500 text-sm">Nenhum alinhamento favoritado.</li>'}</ul></section>`;
 };
@@ -628,5 +674,5 @@ window.addEventListener('hashchange', handleHash);
 
 // ---- boot -------------------------------------------------------------------
 if (!handleHash()) {
-  if (State.token) go('home'); else Views.login();
+  if (State.token) go('home'); else Views.landing();
 }
