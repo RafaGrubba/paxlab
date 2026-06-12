@@ -21,6 +21,9 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build /app/bin/paxlab /usr/local/bin/paxlab
+# O front-end é servido como estático (serveDirectoryFileServer "frontend"),
+# relativo ao WORKDIR — precisa estar na imagem final.
+COPY --from=build /app/frontend /app/frontend
 
 # Locale UTF-8 (evita erro de encoding em logs com acento).
 ENV LANG=C.UTF-8
