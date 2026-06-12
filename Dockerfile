@@ -22,6 +22,10 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /app/bin/paxlab /usr/local/bin/paxlab
 
+# Locale UTF-8 (evita erro de encoding em logs com acento).
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
 # A porta efetiva vem da env PORT (definida pela plataforma).
 EXPOSE 8080
 CMD ["paxlab"]
