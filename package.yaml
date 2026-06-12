@@ -1,0 +1,62 @@
+name:                paxlab
+version:             0.1.0.0
+synopsis:            Plataforma de bioinformática com caderno reprodutível
+description:         Análise de sequências de DNA/RNA/proteína onde cada
+                     análise vira um registro reproduzível e compartilhável.
+author:              Rafael
+license:             BSD-3-Clause
+language:            GHC2021
+
+default-extensions:
+  - OverloadedStrings
+  - LambdaCase
+  - RecordWildCards
+  - ScopedTypeVariables
+
+flags:
+  postgres:
+    description: Usa o backend PostgreSQL em vez de SQLite (produção).
+    default: false
+    manual: true
+
+dependencies:
+  - base >= 4.7 && < 5
+  - text
+  - bytestring
+  - containers
+  - array
+  - time
+  - mtl
+  - transformers
+  - aeson
+  - scotty
+  - lucid
+  - persistent
+  - monad-logger
+  - password
+  - random
+  - http-types
+  - http-conduit
+
+library:
+  source-dirs: src
+  when:
+    - condition: flag(postgres)
+      then:
+        dependencies: [persistent-postgresql]
+        cpp-options: -DPOSTGRES
+      else:
+        dependencies: [persistent-sqlite]
+
+executables:
+  paxlab:
+    main:           Main.hs
+    source-dirs:    app
+    dependencies:   [paxlab]
+    ghc-options:    [-threaded, -rtsopts, -with-rtsopts=-N]
+
+tests:
+  paxlab-test:
+    main:           Spec.hs
+    source-dirs:    test
+    dependencies:   [paxlab]

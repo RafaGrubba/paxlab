@@ -1,0 +1,20 @@
+# Configuração de deploy no Fly.io.  Banco: crie um Postgres gerenciado com
+#   fly postgres create
+# e conecte com
+#   fly postgres attach <nome-do-postgres>
+# (isso define a env DATABASE_URL automaticamente).
+app = "paxlab"
+primary_region = "gru"   # São Paulo
+
+[build]
+
+[env]
+  PORT = "8080"
+  PAXLAB_SECURE_COOKIES = "1"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0

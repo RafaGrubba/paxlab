@@ -1,0 +1,10 @@
+# Reaproveita o GHC 9.6.x já instalado via ghcup (compiler-check match-minor
+# aceita o 9.6.7 local para um snapshot que pede 9.6.6), evitando baixar
+# outra toolchain.
+snapshot: lts-22.28
+# Sobrescreve o GHC do snapshot (9.6.6) pelo 9.6.7 já instalado via ghcup.
+compiler: ghc-9.6.7
+packages:
+  - .
+system-ghc: true
+install-ghc: false
